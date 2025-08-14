@@ -1,42 +1,223 @@
+/* simple_ls_with_perms.c
+   Minimal changes from your version: prints type + permissions before name.
+   Uses ft_strjoin / ft_strncmp from libft and ft_printf for printing name.
+*/
+
 #include <stdio.h>
-#include <dirent.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <dirent.h>
 #include <string.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
+#include <pwd.h>
+#include <grp.h>
 #include "libft/libft.h"
+#include "ft_printf/include/ft_printf.h"
 
-int list_recursive(char *path)
+#include <time.h>
+void print_permissions(mode_t mode)
+{
+    /* owner */
+    putchar((mode & S_IRUSR) ? 'r' : '-');
+    putchar((mode & S_IWUSR) ? 'w' : '-');
+    if (mode & S_ISUID)
+        putchar((mode & S_IXUSR) ? 's' : 'S');
+    else
+        putchar((mode & S_IXUSR) ? 'x' : '-');
+
+    /* group */
+    putchar((mode & S_IRGRP) ? 'r' : '-');
+    putchar((mode & S_IWGRP) ? 'w' : '-');
+    if (mode & S_ISGID)
+        putchar((mode & S_IXGRP) ? 's' : 'S');
+    else
+        putchar((mode & S_IXGRP) ? 'x' : '-');
+
+    /* others */
+    putchar((mode & S_IROTH) ? 'r' : '-');
+    putchar((mode & S_IWOTH) ? 'w' : '-');
+    if (mode & S_ISVTX)
+        putchar((mode & S_IXOTH) ? 't' : 'T');
+    else
+        putchar((mode & S_IXOTH) ? 'x' : '-');
+}
+
+void print_hard_links(const char *path) {
+    struct stat st;
+
+    if (lstat(path, &st) == -1) {
+        perror(path);
+         return;
+    }
+
+    struct passwd *pw = getpwuid(st.st_uid);
+    struct group  *gr = getgrgid(st.st_gid);
+
+    
+    printf("  %lu", (unsigned long)st.st_nlink);
+    if (pw != NULL) {
+        printf(" %s", pw->pw_name);
+
+    }    
+    if (gr != NULL) {
+        printf(" %s", gr->gr_name);
+    }
+
+    printf("  %lld ", (long long)st.st_size);
+    char *time_str = ctime(&st.st_mtime);
+    char month[4];
+    month[0] = time_str[4];
+    month[1] = time_str[5];
+    month[2] = time_str[6];
+    month[3] = '\0';
+    char day[3];
+    day[0] = time_str[8];
+    day[1] = time_str[9];
+    day[2] = '\0';
+    char hour_min[6];
+    hour_min[0] = time_str[11];  
+    hour_min[1] = time_str[12];  
+    hour_min[2] = ':';
+    hour_min[3] = time_str[14];  
+    hour_min[4] = time_str[15];  
+    hour_min[5] = '\0';
+
+    printf(" %s", month); 
+    printf(" %s", day);
+    printf(" %s", hour_min);
+
+
+}
+
+
+void printl(const char *path, const char *name)
+{
+    if (name == NULL || path == NULL)
+        return;
+
+    char *tmp = ft_strjoin(path, "/");
+    if (tmp == NULL) {
+        perror("ft_strjoin");
+        return;
+    }
+
+    char *full_path = ft_strjoin(tmp, name);
+    free(tmp);
+    if (full_path == NULL) {
+        perror("ft_strjoin");
+        return;
+    }
+
+    struct stat fileStat;
+    /* use lstat so symlinks are reported as symlinks */
+    if (lstat(full_path, &fileStat) < 0) {
+        perror(full_path);
+        free(full_path);
+        return;
+    }
+
+    /* file type char */
+    if (S_ISREG(fileStat.st_mode)) {
+        putchar('-');
+    } else if (S_ISDIR(fileStat.st_mode)) {
+        putchar('d');
+    } else if (S_ISLNK(fileStat.st_mode)) {
+        putchar('l');
+    } else if (S_ISCHR(fileStat.st_mode)) {
+        putchar('c');
+    } else if (S_ISBLK(fileStat.st_mode)) {
+        putchar('b');
+    } else if (S_ISFIFO(fileStat.st_mode)) {
+        putchar('p');
+    } else if (S_ISSOCK(fileStat.st_mode)) {
+        putchar('s');
+    } else {
+        putchar('?');
+    }
+
+    /* permissions rwxrwxrwx (with s/S and t/T handling) */
+    print_permissions(fileStat.st_mode);
+    print_hard_links(full_path);
+
+    putchar(' ');
+
+    /* print name (using ft_printf as you included it) */
+    printf("%s\n", name);
+
+    free(full_path);
+}
+
+int list_recursive(const char *path)
 {
     struct dirent *entry;
     DIR *dir = opendir(path);
-
-    // Check if directory opened successfully
     if (dir == NULL) {
-        perror("");
+        perror(path);
         return 1;
     }
 
-    printf("\n%s:\n", path); // Print the current directory path
-
-    // Iterate through entries in the directory
+    /* first pass: print type+perms and name for each entry */
     while ((entry = readdir(dir)) != NULL) {
-        if (ft_strncmp(entry->d_name, ".",1) == 0 || ft_strncmp(entry->d_name, "..",2) == 0) {
-            continue; // Skip "." and ".." entries
+        printl(path, entry->d_name);
+    }
+
+    closedir(dir);
+
+    dir = opendir(path);
+    if (dir == NULL) {
+        perror(path);
+        return 1;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (ft_strncmp(entry->d_name, ".", 1) == 0)
+            continue;
+        if (ft_strncmp(entry->d_name, "..", 2) == 0)
+            continue;
+
+        int is_dir = 0;
+#ifdef DT_DIR
+        if (entry->d_type == DT_DIR)
+            is_dir = 1;
+        else if (entry->d_type == DT_UNKNOWN)
+#endif
+        {
+            /* build path and lstat to check type */
+            char *tmp = ft_strjoin(path, "/");
+            if (tmp == NULL) {
+                perror("ft_strjoin");
+                continue;
+            }
+            char *fullpath = ft_strjoin(tmp, entry->d_name);
+            free(tmp);
+            if (fullpath == NULL) {
+                perror("ft_strjoin");
+                continue;
+            }
+            struct stat st;
+            if (lstat(fullpath, &st) == 0 && S_ISDIR(st.st_mode))
+                is_dir = 1;
+            free(fullpath);
         }
 
-        printf("%s\n", entry->d_name);
+        if (is_dir) {
+            /* build full path for recursion */
+            char *tmp2 = ft_strjoin(path, "/");
+            if (tmp2 == NULL) {
+                perror("ft_strjoin");
+                continue;
+            }
+            char *fullpath2 = ft_strjoin(tmp2, entry->d_name);
+            free(tmp2);
+            if (fullpath2 == NULL) {
+                perror("ft_strjoin");
+                continue;
+            }
 
-        // If entry is a directory, recursively list its contents
-        char full_path[1024];
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-        struct stat entry_stat;
-        if (stat(full_path, &entry_stat) == 0 && S_ISDIR(entry_stat.st_mode)) {
-            list_recursive(full_path);
+            printf("%s:\n", fullpath2);
+           // list_recursive(fullpath2);
+            free(fullpath2);
         }
     }
 
@@ -45,13 +226,6 @@ int list_recursive(char *path)
 }
 
 int main(int argc, char *argv[]) {
-    
-    // Use current directory if no directory is specified
-     char *path = (argc > 1) ? argv[1] : ".";
-
-    list_recursive(path);
-
-    return 0;
+    const char *path = (argc > 1) ? argv[1] : ".";
+    return list_recursive(path);
 }
-
-
