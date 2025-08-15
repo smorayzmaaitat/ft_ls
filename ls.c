@@ -14,8 +14,61 @@
 #include <grp.h>
 #include "libft/libft.h"
 #include "ft_printf/include/ft_printf.h"
-
 #include <time.h>
+typedef struct PathNode {
+    char *path;               
+    struct PathNode *next;    
+} PathNode;
+
+static PathNode *g_head = NULL;
+static PathNode *g_tail = NULL;
+
+
+static PathNode *create_node(const char *path)
+{
+    const char *use = (path && *path) ? path : ".";
+    char *dup = strdup(use);        
+    if (!dup) return NULL;
+
+    PathNode *n = malloc(sizeof(PathNode));
+
+    if (!n) {
+        free(dup);
+        return NULL;
+    }
+
+    n->path = dup;
+    n->next = NULL;
+    return n;
+}
+
+
+int append_path(const char *path)
+{
+    PathNode *n = create_node(path);
+    if (!n) return -1;
+    if (g_tail == NULL) {   
+        g_head = g_tail = n;
+    } else {
+        g_tail->next = n;
+        g_tail = n;
+    }
+    return 0;
+}
+
+void free_paths(void)
+{
+    PathNode *cur = g_head;
+    while (cur) {
+        PathNode *next = cur->next;
+        free(cur->path);
+        free(cur);
+        cur = next;
+    }
+    g_head = g_tail = NULL;
+}
+
+
 void print_permissions(mode_t mode)
 {
     /* owner */
