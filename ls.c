@@ -56,6 +56,7 @@ void print_hard_links(const char *path) {
 
     
     printf("  %lu", (unsigned long)st.st_nlink);
+
     if (pw != NULL) {
         printf(" %s", pw->pw_name);
 
@@ -110,7 +111,7 @@ void printl(const char *path, const char *name)
     }
 
     struct stat fileStat;
-    /* use lstat so symlinks are reported as symlinks */
+
     if (lstat(full_path, &fileStat) < 0) {
         perror(full_path);
         free(full_path);
@@ -140,9 +141,6 @@ void printl(const char *path, const char *name)
     print_permissions(fileStat.st_mode);
     print_hard_links(full_path);
 
-    putchar(' ');
-
-    /* print name (using ft_printf as you included it) */
     printf("%s\n", name);
 
     free(full_path);
