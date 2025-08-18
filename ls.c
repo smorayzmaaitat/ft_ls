@@ -1,53 +1,116 @@
-/* simple_ls_with_perms.c
-   Minimal changes from your version: prints type + permissions before name.
-   Uses ft_strjoin / ft_strncmp from libft and ft_printf for printing name.
-*/
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <errno.h>
-#include <pwd.h>
-#include <grp.h>
-#include "libft/libft.h"
-#include "ft_printf/include/ft_printf.h"
-#include <time.h>
-typedef struct PathNode {
-    char *path;               
-    struct PathNode *next;    
-} PathNode;
+#included "ft_ls.h"
 
 static PathNode *g_head = NULL;
 static PathNode *g_tail = NULL;
 
 
-static PathNode *create_node(const char *path)
-{
-    const char *use = (path && *path) ? path : ".";
-    char *dup = strdup(use);        
-    if (!dup) return NULL;
 
+int parse_args(int argc, char **argv, t_flags *flags, char ***paths, int *path_count) {
+    if (!flags || !paths || !path_count) return -1;
+    
+    flags->l = 0;
+    flags->a = 0;
+    flags->r = 0;
+    flags->R = 0;
+    flags->t = 0;
+    
+    *paths = NULL;
+    *path_count = 0;
+    
+    char **path_list = malloc(sizeof(char*) * argc);
+    if (!path_list) return -1;
+    
+    int i = 1;
+    while (i < argc) {
+        if (argv[i][0] == '-' && argv[i][1]) {
+
+            int j = 1;
+            while (argv[i][j]) {
+                if (argv[i][j] == 'l') flags->l = 1;
+                else if (argv[i][j] == 'a') flags->a = 1;
+                else if (argv[i][j] == 'r') flags->r = 1;
+                else if (argv[i][j] == 'R') flags->R = 1;
+                else if (argv[i][j] == 't') flags->t = 1;
+                else {
+                    free(path_list);
+                    return -1;
+                }
+                j++;
+            }
+        } else {
+            path_list[*path_count] = argv[i];
+            (*path_count)++;
+        }
+        i++;
+    }
+    
+    if (*path_count == 0) {
+        path_list[0] = ".";
+        *path_count = 1;
+    }
+    
+    *paths = path_list;
+    return 0;
+}
+
+
+static const char *get_basename(const char *path) {
+    if (!path || !*path) return NULL;
+    
+    const char *last_slash = strrchr(path, '/');
+    if (last_slash) {
+        return last_slash + 1;
+    }
+    
+    return path; 
+}
+
+static PathNode *create_node(const char *path) {
+    if (!path) return NULL;
+    
     PathNode *n = malloc(sizeof(PathNode));
+    if (!n) return NULL;
+    
+    n->path = strdup(path);
+    if (!n->path) {
+        free(n);
+        return NULL;
+    }
+    
 
-    if (!n) {
-        free(dup);
+    n->name = strdup(get_basename(path));
+    if (!n->name) {
+        free(n->path);
+        free(n);
         return NULL;
     }
 
-    n->path = dup;
+    struct stat st;
+    if (lstat(path, &st) == 0) {
+        n->mtime_sec = st.st_mtime;
+        #ifdef __APPLE__
+            n->mtime_nsec = st.st_mtimespec.tv_nsec;
+        #elif defined(__linux__)
+            n->mtime_nsec = st.st_mtim.tv_nsec;
+        #else
+            n->mtime_nsec = 0;
+        #endif
+    } else {
+        n->mtime_sec = 0;
+        n->mtime_nsec = 0;
+    }
+    
     n->next = NULL;
     return n;
 }
 
 
-int append_path(const char *path)
-{
+
+int append_path(const char *path) {
     PathNode *n = create_node(path);
     if (!n) return -1;
-    if (g_tail == NULL) {   
+    
+    if (!g_tail) {
         g_head = g_tail = n;
     } else {
         g_tail->next = n;
@@ -56,17 +119,45 @@ int append_path(const char *path)
     return 0;
 }
 
-void free_paths(void)
-{
-    PathNode *cur = g_head;
-    while (cur) {
-        PathNode *next = cur->next;
-        free(cur->path);
-        free(cur);
-        cur = next;
+
+static void free_node(PathNode *node) {
+    if (node) {
+
+        free(node->path);
+        free(node->name);
+        free(node);
+    }
+}
+
+
+
+void free_path_list(void) {
+    PathNode *current = g_head;
+    while (current) {
+        PathNode *next = current->next;
+        free_node(current);
+        current = next;
     }
     g_head = g_tail = NULL;
 }
+
+
+void print_path_list(void) {
+    PathNode *current = g_head;
+    printf("Path List:\n");
+    while (current) {
+        printf("  Path: %s\n", current->path);
+        printf("  Name: %s\n", current->name);
+        printf("  Modified: %ld.%09ld\n", current->mtime_sec, current->mtime_nsec);
+        printf("  ---\n");
+        current = current->next;
+    }
+}
+
+
+
+
+
 
 
 void print_permissions(mode_t mode)
@@ -190,7 +281,6 @@ void printl(const char *path, const char *name)
         putchar('?');
     }
 
-    /* permissions rwxrwxrwx (with s/S and t/T handling) */
     print_permissions(fileStat.st_mode);
     print_hard_links(full_path);
 
@@ -210,6 +300,7 @@ int list_recursive(const char *path)
 
     /* first pass: print type+perms and name for each entry */
     while ((entry = readdir(dir)) != NULL) {
+
         printl(path, entry->d_name);
     }
 
