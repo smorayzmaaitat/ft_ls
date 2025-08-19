@@ -14,16 +14,17 @@
 typedef struct PathNode {
     char *path;
     char *name;
+    char *parent_name;
     time_t mtime_sec;
     long   mtime_nsec;
     struct PathNode *next;
 } PathNode;
 
 
-typedef struct {
-    int l;  
-    int a;  
-    int r;  
-    int R;  
-    int t;  
-} t_flags;
+typedef struct s_flags {
+    int l;
+    int a;
+    int r;
+    int R;
+    int t;
+}   t_flags;

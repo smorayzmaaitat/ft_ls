@@ -1,18 +1,14 @@
-#included "ft_ls.h"
+#include "ft_ls.h"
 
 static PathNode *g_head = NULL;
 static PathNode *g_tail = NULL;
+t_flags flags = {0};
 
 
 
-int parse_args(int argc, char **argv, t_flags *flags, char ***paths, int *path_count) {
-    if (!flags || !paths || !path_count) return -1;
-    
-    flags->l = 0;
-    flags->a = 0;
-    flags->r = 0;
-    flags->R = 0;
-    flags->t = 0;
+
+int parse_args(int argc, char **argv, char ***paths, int *path_count) {
+    if ( !paths || !path_count) return -1;
     
     *paths = NULL;
     *path_count = 0;
@@ -22,22 +18,23 @@ int parse_args(int argc, char **argv, t_flags *flags, char ***paths, int *path_c
     
     int i = 1;
     while (i < argc) {
-        if (argv[i][0] == '-' && argv[i][1]) {
+        if (argv[i][0] == '-' && argv[i][1] && argv[i][1] != '-') {
 
             int j = 1;
+
             while (argv[i][j]) {
-                if (argv[i][j] == 'l') flags->l = 1;
-                else if (argv[i][j] == 'a') flags->a = 1;
-                else if (argv[i][j] == 'r') flags->r = 1;
-                else if (argv[i][j] == 'R') flags->R = 1;
-                else if (argv[i][j] == 't') flags->t = 1;
+                if      (argv[i][j] == 'l') flags.l = 1;
+                else if (argv[i][j] == 'a') flags.a = 1;
+                else if (argv[i][j] == 'r') flags.r = 1;
+                else if (argv[i][j] == 'R') flags.R = 1;
+                else if (argv[i][j] == 't') flags.t = 1;
                 else {
                     free(path_list);
                     return -1;
                 }
                 j++;
             }
-        } else {
+        } else if (argv[1][0] == '-' && argv[1][1] != '-') {
             path_list[*path_count] = argv[i];
             (*path_count)++;
         }
@@ -54,6 +51,7 @@ int parse_args(int argc, char **argv, t_flags *flags, char ***paths, int *path_c
 }
 
 
+
 static const char *get_basename(const char *path) {
     if (!path || !*path) return NULL;
     
@@ -65,18 +63,20 @@ static const char *get_basename(const char *path) {
     return path; 
 }
 
-static PathNode *create_node(const char *path) {
+
+static PathNode *create_node(const char *path, const char *parent_name) {
     if (!path) return NULL;
     
     PathNode *n = malloc(sizeof(PathNode));
     if (!n) return NULL;
     
-    n->path = strdup(path);
+    n->path = path;;
     if (!n->path) {
         free(n);
         return NULL;
     }
     
+    n->parent_name = parent_name;
 
     n->name = strdup(get_basename(path));
     if (!n->name) {
@@ -106,8 +106,9 @@ static PathNode *create_node(const char *path) {
 
 
 
-int append_path(const char *path) {
-    PathNode *n = create_node(path);
+int append_path(const char *path, const char *parent_name) {
+    if (!path) return -1;
+    PathNode *n = create_node(path,parent_name);
     if (!n) return -1;
     
     if (!g_tail) {
@@ -298,34 +299,9 @@ int list_recursive(const char *path)
         return 1;
     }
 
-    /* first pass: print type+perms and name for each entry */
     while ((entry = readdir(dir)) != NULL) {
-
-        printl(path, entry->d_name);
-    }
-
-    closedir(dir);
-
-    dir = opendir(path);
-    if (dir == NULL) {
-        perror(path);
-        return 1;
-    }
-
-    while ((entry = readdir(dir)) != NULL) {
-        if (ft_strncmp(entry->d_name, ".", 1) == 0)
-            continue;
-        if (ft_strncmp(entry->d_name, "..", 2) == 0)
-            continue;
-
-        int is_dir = 0;
-#ifdef DT_DIR
-        if (entry->d_type == DT_DIR)
-            is_dir = 1;
-        else if (entry->d_type == DT_UNKNOWN)
-#endif
-        {
-            /* build path and lstat to check type */
+        if (flags.a == 0 && (entry->d_name[0] == '.' ))
+            continue; 
             char *tmp = ft_strjoin(path, "/");
             if (tmp == NULL) {
                 perror("ft_strjoin");
@@ -337,35 +313,50 @@ int list_recursive(const char *path)
                 perror("ft_strjoin");
                 continue;
             }
-            struct stat st;
-            if (lstat(fullpath, &st) == 0 && S_ISDIR(st.st_mode))
-                is_dir = 1;
+            create_node(fullpath, path);
+    }
+
+    closedir(dir);
+
+    dir = opendir(path);
+    if (dir == NULL) {
+        perror(path);
+        return 1;
+    }
+
+
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (ft_strncmp(entry->d_name, ".", 1) == 0)
+            continue;
+        if (ft_strncmp(entry->d_name, "..", 2) == 0)
+            continue;
+
+        if (entry->d_type == DT_DIR)
+        {
+
+            char *tmp = ft_strjoin(path, "/");
+            if (tmp == NULL) {
+                perror("ft_strjoin");
+                continue;
+            }
+            char *fullpath = ft_strjoin(tmp, entry->d_name);
+            free(tmp);
+            if (fullpath == NULL) {
+                perror("ft_strjoin");
+                continue;
+            }
+            list_recursive(fullpath);
             free(fullpath);
         }
 
-        if (is_dir) {
-            /* build full path for recursion */
-            char *tmp2 = ft_strjoin(path, "/");
-            if (tmp2 == NULL) {
-                perror("ft_strjoin");
-                continue;
-            }
-            char *fullpath2 = ft_strjoin(tmp2, entry->d_name);
-            free(tmp2);
-            if (fullpath2 == NULL) {
-                perror("ft_strjoin");
-                continue;
-            }
-
-            printf("%s:\n", fullpath2);
-           // list_recursive(fullpath2);
-            free(fullpath2);
-        }
+        
     }
 
     closedir(dir);
     return 0;
 }
+
 
 int main(int argc, char *argv[]) {
     const char *path = (argc > 1) ? argv[1] : ".";
