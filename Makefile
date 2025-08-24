@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror
+CFLAGS = -Wall -Wextra -Werror 
 
 # Target executable and object files
 TARGET = ls
@@ -11,7 +11,7 @@ all: libft_make printf_make $(TARGET)
 
 # Link the object file to create the final executable
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ) libft/libft.a
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ) libft/libft.a ft_printf/libftprintf.a
 
 libft_make:
 	cd libft && $(MAKE)
