@@ -1,8 +1,5 @@
 #include "ft_ls.h"
 
-static PathNode *g_head = NULL;
-static PathNode *g_tail = NULL;
-t_flags flags = {0};
 
 int parse_args(int argc, char **argv, char ***paths, int *path_count) {
     if (!paths || !path_count || !argv) return -1;
@@ -16,7 +13,7 @@ int parse_args(int argc, char **argv, char ***paths, int *path_count) {
     
     int i = 1;
     while (i < argc) {
-        // Check if it's a flag
+        
         if (argv[i][0] == '-' && argv[i][1] != '\0' && argv[i][1] != '-') {
             int j = 1;
             while (argv[i][j]) {
@@ -26,31 +23,44 @@ int parse_args(int argc, char **argv, char ***paths, int *path_count) {
                 else if (argv[i][j] == 'R') flags.R = 1;
                 else if (argv[i][j] == 't') flags.t = 1;
                 else {
-                    // Invalid flag
                     free(path_list);
                     return -1;
                 }
                 j++;
             }
         } else {
-            // It's a path (not a flag)
+            
             if (*path_count >= argc) {
                 free(path_list);
                 return -1;
             }
-            path_list[*path_count] = argv[i];
-            (*path_count)++;
+            if(argv[i][0] == '-' && argv[i][1] != '\0' && argv[i][1] == '-') {
+                if (argv[i][2] == '\0')
+                {
+                    path_list[*path_count] = ".";
+                    (*path_count)++;
+                }
+                else if (argv[i][2] != '\0' ) {
+                        printf("ls: unrecognized option `%s'\n", argv[i]);
+                        printf("usage: ls [-@ABCFGHILOPRSTUWXabcdefghiklmnopqrstuvwxy1%%,] [--color=when] [-D format] [file ...]\n");
+                        free(path_list);
+                        return -1;
+                }
+            }
+            else{
+                 path_list[*path_count] = argv[i];
+                  (*path_count)++;
+            }
+          
         }
         i++;
     }
     
-    // If no paths provided, use current directory
     if (*path_count == 0) {
         path_list[0] = ".";
         *path_count = 1;
     }
     
-    // Add NULL terminator
     path_list[*path_count] = NULL;
     
     *paths = path_list;
@@ -214,23 +224,22 @@ void sort_tmp_by_time(PathNode **head) {
     }
 }
 
-void reverse_order(PathNode **head)
-{
+void reverse_tmp_list(PathNode **head) {
     if (!head || !*head) return;
-
+    
     PathNode *prev = NULL;
     PathNode *current = *head;
     PathNode *next = NULL;
-
+    
     while (current) {
-        next = current->next;  
-        current->next = prev;  
-        prev = current;        
-        current = next;       
+        next = current->next;    
+        current->next = prev;    
+        prev = current;         
+        current = next;    
     }
-    *head = prev;  
+    *head = prev;
 }
-
+ 
 
 void sort_tmp_by_name(PathNode **head) {
     if (!head || !*head) return;
@@ -335,6 +344,7 @@ void print_type_suffix(char *path) {
     }
 }
 
+
 void print_normal(char *name, char *path) {
     if (!name || !path) return;
 
@@ -367,13 +377,33 @@ void printl(char *path) {
     // Permissions
     ft_putchar((st.st_mode & S_IRUSR) ? 'r' : '-');
     ft_putchar((st.st_mode & S_IWUSR) ? 'w' : '-');
+    if (st.st_mode & S_ISUID) {
+    ft_putchar((st.st_mode & S_IXUSR) ? 's' : 'S');
+    } else {
     ft_putchar((st.st_mode & S_IXUSR) ? 'x' : '-');
+    }
     ft_putchar((st.st_mode & S_IRGRP) ? 'r' : '-');
     ft_putchar((st.st_mode & S_IWGRP) ? 'w' : '-');
+    if (st.st_mode & S_ISGID) {
+    // setgid is set
+    ft_putchar((st.st_mode & S_IXGRP) ? 's' : 'S');
+} else {
+    // normal execute
     ft_putchar((st.st_mode & S_IXGRP) ? 'x' : '-');
+}
+
     ft_putchar((st.st_mode & S_IROTH) ? 'r' : '-');
     ft_putchar((st.st_mode & S_IWOTH) ? 'w' : '-');
+    if (st.st_mode & S_ISVTX) {
+    // sticky bit is set
+    ft_putchar((st.st_mode & S_IXOTH) ? 't' : 'T');
+    } else {
+    // normal execute
     ft_putchar((st.st_mode & S_IXOTH) ? 'x' : '-');
+    }
+
+
+
 
     // Links count
     ft_putchar(' ');
@@ -391,33 +421,30 @@ void printl(char *path) {
     if (gr) ft_putstr(gr->gr_name);
     else ft_putnbr(st.st_gid);
 
-    // File size
+   
     ft_putchar(' ');
     ft_putnbr((long long)st.st_size);
 
-    // Date and time
     char *time_str = ctime(&st.st_mtime);
     
     ft_putchar(' ');
-    // Print month (chars 4-6)
     ft_putchar(time_str[4]);
     ft_putchar(time_str[5]);
     ft_putchar(time_str[6]);
     
     ft_putchar(' ');
-    // Print day (chars 8-9)
+
     ft_putchar(time_str[8]);
     ft_putchar(time_str[9]);
     
     ft_putchar(' ');
-    // Print time (chars 11-15)
     ft_putchar(time_str[11]);
     ft_putchar(time_str[12]);
     ft_putchar(':');
     ft_putchar(time_str[14]);
     ft_putchar(time_str[15]);
 
-    // File name (basename)
+ 
     char *name = strrchr(path, '/');
     if (name) name++;
     else name = path;
@@ -506,11 +533,18 @@ int list_recursive(char *path) {
     }
 
 
-    if (flags.t) {
-        sort_tmp_by_time(&tmp_head);
-    } else {
-        sort_tmp_by_name(&tmp_head);
-    }
+if (flags.t && flags.r) {
+    sort_tmp_by_time(&tmp_head);
+    reverse_tmp_list(&tmp_head);  
+} else if (flags.t) {
+    sort_tmp_by_time(&tmp_head);
+} else if (flags.r) {
+    sort_tmp_by_name(&tmp_head);
+    reverse_tmp_list(&tmp_head);
+} else {
+    sort_tmp_by_name(&tmp_head);
+} 
+     
 
     add_tmp_to_global(tmp_head);
 
@@ -549,10 +583,11 @@ int main(int argc, char *argv[]) {
         char *current_path = paths[--path_count];
         list_recursive(current_path);
     }
-
     print_path_list();
     free_path_list();
     free(paths);
 
+ 
+    
     return 0;
 }

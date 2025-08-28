@@ -28,3 +28,8 @@ typedef struct s_flags {
     int R;
     int t;
 }   t_flags;
+
+
+static PathNode *g_head = NULL;
+static PathNode *g_tail = NULL;
+t_flags flags = {0};
